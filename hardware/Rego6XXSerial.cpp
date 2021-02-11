@@ -7,7 +7,6 @@
 #include "../main/WebServer.h"
 #include "../main/SQLHelper.h"
 #include "../webserver/cWebem.h"
-
 // This code is inspired by the Rago600 project:
 // http://rago600.sourceforge.net/
 // And the TaloLogger:
@@ -24,22 +23,22 @@
 #define Rego6XX_READ_BUFFER_MASK (Rego6XX_READ_BUFFER_SIZE - 1)
 #define Rego6XX_MAX_ERRORS_UNITL_RESTART 20
 
-typedef enum
+enum RegoRegType
 {
 	REGO_TYPE_NONE = 0,
 	REGO_TYPE_TEMP,
 	REGO_TYPE_STATUS,
 	REGO_TYPE_COUNTER,
 	REGO_TYPE_END
-} RegoRegType;
+};
 
-using RegoRegisters = struct
+struct RegoRegisters
 {
 	char name[25];
 	unsigned short regNum_type1;
 	unsigned short regNum_type2;
 	unsigned short regNum_type3;
-	RegoRegType type;
+	enum RegoRegType type;
 	float lastTemp;
 	int lastValue;
 	time_t lastSent;
@@ -67,7 +66,7 @@ using RegoReply = union {
 	} data;
 };
 
-std::array<RegoRegisters, 26> g_allRegisters{ {
+auto g_allRegisters = std::array<RegoRegisters, 26>{ {
 	{ "GT1 Radiator", 0x0209, 0x020B, 0x020D, REGO_TYPE_TEMP, -50.0, -1, 0 },
 	{ "GT2 Out", 0x020A, 0x020C, 0x020E, REGO_TYPE_TEMP, -50.0, -1, 0 },
 	{ "GT3 Hot water", 0x020B, 0x020D, 0x020F, REGO_TYPE_TEMP, -50.0, -1, 0 },

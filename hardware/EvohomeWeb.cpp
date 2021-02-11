@@ -34,8 +34,8 @@
 
 //extern std::string szUserDataFolder;
 
-const uint8_t CEvohomeWeb::m_dczToEvoWebAPIMode[7] = { 0,2,3,4,6,1,5 };
-const std::string CEvohomeWeb::weekdays[7] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+constexpr std::array<uint8_t, 7> CEvohomeWeb::m_dczToEvoWebAPIMode{ 0, 2, 3, 4, 6, 1, 5 };
+constexpr std::array<const char *, 7> CEvohomeWeb::weekdays{ "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
 //const std::string CEvohomeWeb::evo_modes[7] = {"Auto", "HeatingOff", "AutoWithEco", "Away", "DayOff", "", "Custom"};
 
 
@@ -616,7 +616,8 @@ void CEvohomeWeb::DecodeZone(zone* hz)
 					{
 						m_sql.safe_query("UPDATE Hardware SET Extra='%0.2f;%d' WHERE ID=%d", m_awaysetpoint, m_wdayoff, this->m_HwdID);
 
-						_log.Log(LOG_STATUS, "(%s) change Day Off schedule reference to '%s' because of non matching setpoint (%s)", m_Name.c_str(), weekdays[m_wdayoff].c_str(), (*hz->installationInfo)["name"].asString().c_str());
+						_log.Log(LOG_STATUS, "(%s) change Day Off schedule reference to '%s' because of non matching setpoint (%s)", m_Name.c_str(), weekdays[m_wdayoff],
+							 (*hz->installationInfo)["name"].asString().c_str());
 					}
 					if (m_showschedule)
 						szuntil = local_to_utc(get_next_switchpoint(hz));
@@ -734,37 +735,34 @@ uint8_t CEvohomeWeb::GetUnit_by_ID(unsigned long evoID)
 		result = m_sql.safe_query(
 			"SELECT Unit,DeviceID FROM DeviceStatus WHERE (HardwareID==%d) AND (Type==%d) ORDER BY Unit",
 			this->m_HwdID, pTypeEvohomeZone);
-		for (row = 1; row <= m_nMaxZones; row++)
-			m_zones[row] = 0;
-		for (row = 0; row < result.size(); row++)
+		m_zones = {};
+		for (auto &r : result)
 		{
-			int unit = atoi(result[row][0].c_str());
-			m_zones[unit] = atol(result[row][1].c_str());
+			int unit = atoi(r[0].c_str());
+			m_zones[unit] = atol(r[1].c_str());
 			if (m_zones[unit] == uint64_t(unit) + 92000) // mark manually added, unlinked zone as free
 				m_zones[unit] = 0;
 		}
 		m_zones[0] = 1;
 	}
-	unsigned char unit = 0;
-	for (row = 1; row <= m_nMaxZones; row++)
+
+	const auto it = std::find_if(std::next(m_zones.begin()), m_zones.end(), [=](auto &&zone) { return zone == evoID; });
+	if (it != m_zones.end())
 	{
-		unit++;
-		if (m_zones[row] == evoID)
-			return (uint8_t)(unit);
+		return std::distance(m_zones.begin(), it);
 	}
+
 	if (m_updatedev) // create/update and return the first free unit
 	{
-		unit = 0;
-		for (row = 1; row <= m_nMaxZones; row++)
+		for (row = 1; row < m_zones.size(); row++)
 		{
-			unit++;
 			if (m_zones[row] == 0)
 			{
 				std::string sdevname;
 				unsigned long nid = 92000 + row;
 				char ID[40];
 				sprintf(ID, "%lu", nid);
-				uint64_t DevRowIdx = m_sql.UpdateValue(this->m_HwdID, ID, unit, pTypeEvohomeZone, sTypeEvohomeZone, 10, 255, 0, "0.0;0.0;Auto", sdevname);
+				uint64_t DevRowIdx = m_sql.UpdateValue(this->m_HwdID, ID, row, pTypeEvohomeZone, sTypeEvohomeZone, 10, 255, 0, "0.0;0.0;Auto", sdevname);
 				if (DevRowIdx == -1)
 					return (uint8_t)-1;
 				char devname[8];
@@ -772,7 +770,7 @@ uint8_t CEvohomeWeb::GetUnit_by_ID(unsigned long evoID)
 				sprintf(ID, "%lu", evoID);
 				m_sql.safe_query("UPDATE DeviceStatus SET Name='%q',DeviceID='%q' WHERE (ID == %" PRIu64 ")", devname, ID, DevRowIdx);
 				m_zones[row] = evoID;
-				return (uint8_t)(unit);
+				return (uint8_t)(row);
 			}
 		}
 		_log.Log(LOG_ERROR, "(%s) cannot add new zone because you have no free zones left", m_Name.c_str());
